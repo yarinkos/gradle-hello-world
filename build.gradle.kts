@@ -8,6 +8,9 @@ plugins {
 
     // Derives the version from git tags (v1.0.0, v1.0.1, ...)
     id("pl.allegro.tech.build.axion-release") version "1.21.4"
+
+    // `./gradlew spotlessCheck` verifies formatting, `spotlessApply` fixes it
+    id("com.diffplug.spotless") version "8.10.4"
 }
 
 group = "com.ido"
@@ -43,4 +46,34 @@ tasks.jar {
 
 repositories {
     mavenCentral()
+}
+
+dependencies {
+    testImplementation(platform("org.junit:junit-bom:6.1.3"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.test {
+    useJUnitPlatform()
+    testLogging {
+        events("passed", "skipped", "failed")
+    }
+}
+
+// Rule-based rather than a full reformatter (google-java-format etc. reach into
+// javac internals and break on new JDKs). `check`, and so `build`, runs spotlessCheck.
+spotless {
+    java {
+        importOrder()
+        removeUnusedImports()
+        leadingTabsToSpaces(4)
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+    kotlinGradle {
+        leadingTabsToSpaces(4)
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
 }
