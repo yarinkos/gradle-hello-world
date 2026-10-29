@@ -1,37 +1,25 @@
 plugins {
-    kotlin("jvm") version "1.6.20"
     id("application")
     id("java")
     id("idea")
 
-    // This is used to create a GraalVM native image
-    id("org.graalvm.buildtools.native") version "0.9.11"
-
     // This creates a fat JAR
-    id("com.github.johnrengelman.shadow") version "7.1.2"
+    id("com.gradleup.shadow") version "9.6.1"
 }
 
 group = "com.ido"
 description = "HelloWorld"
 
+// Compile and run on Java 21 regardless of the JDK Gradle itself runs on.
+// If 21 is not installed locally, the foojay resolver (settings.gradle.kts) downloads it.
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(21))
+    }
+}
+
 application.mainClass.set("com.ido.HelloWorld")
 
 repositories {
     mavenCentral()
-}
-
-graalvmNative {
-    binaries {
-        named("main") {
-            imageName.set("helloworld")
-            mainClass.set("com.ido.HelloWorld")
-            fallback.set(false)
-            sharedLibrary.set(false)
-            useFatJar.set(true)
-            javaLauncher.set(javaToolchains.launcherFor {
-                languageVersion.set(JavaLanguageVersion.of(17))
-                vendor.set(JvmVendorSpec.matching("GraalVM Community"))
-            })
-        }
-    }
 }
