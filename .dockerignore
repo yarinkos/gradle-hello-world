@@ -1,0 +1,16 @@
+# Only the wrapper, build scripts and src are needed to build the image.
+.git
+.github
+.gradle
+build
+**/build
+.idea
+.vscode
+*.iml
+*.log
+.env
+.env.*
+.DS_Store
+Dockerfile
+.dockerignore
+*.md
