@@ -4,7 +4,11 @@
 # Compiles, runs the format check and unit tests, and packages the fat jar.
 # There is no .git in the build context, so axion cannot read the version from
 # tags; CI computes it once and passes it in as VERSION.
-FROM eclipse-temurin:21-jdk AS build
+#
+# --platform=$BUILDPLATFORM: the jar is platform-independent, so it is built
+# once, natively, and copied into each target platform's runtime image. Only
+# the small runtime stage runs per platform (under emulation for arm64 on CI).
+FROM --platform=$BUILDPLATFORM eclipse-temurin:21-jdk AS build
 ARG VERSION
 RUN test -n "$VERSION" || (echo "VERSION build arg is required, e.g. --build-arg VERSION=1.0.1" >&2 && exit 1)
 

@@ -96,6 +96,7 @@ jobs:
   # ─── docker ────────────────────────────────────────────────────────────────
   # Task 5e-5f: build the multi-stage image tagged with the jar version.
   # PRs only build it (proves the Dockerfile works); master also pushes.
+  # Multi-arch: amd64 for most servers and CI, arm64 for Apple Silicon Macs.
   docker:
     needs: [version, build]
     runs-on: ubuntu-latest
@@ -103,6 +104,9 @@ jobs:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
+
+      # Emulates arm64 for the runtime stage; the jar itself is built natively.
+      - uses: docker/setup-qemu-action@v4
 
       - uses: docker/setup-buildx-action@v4
 
@@ -116,6 +120,7 @@ jobs:
         with:
           context: .
           build-args: VERSION=${{ env.VERSION }}
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.ref == 'refs/heads/master' }}
           tags: |
             ${{ env.IMAGE }}:${{ env.VERSION }}
@@ -126,25 +131,33 @@ jobs:
   # ─── run ───────────────────────────────────────────────────────────────────
   # Task 5g: download the image that was just pushed and run it. A fresh pull
   # from Docker Hub, so this checks what was published, not a local build.
+  # Runs once per platform, so the arm64 image is checked as well, not just built.
   run:
     needs: [version, docker]
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: [linux/amd64, linux/arm64]
     env:
       VERSION: ${{ needs.version.outputs.version }}
+      PLATFORM: ${{ matrix.platform }}
     steps:
+      - uses: docker/setup-qemu-action@v4
+        if: matrix.platform != 'linux/amd64'
+
       - name: Pull from Docker Hub
-        run: docker pull "$IMAGE:$VERSION"
+        run: docker pull --platform "$PLATFORM" "$IMAGE:$VERSION"
 
       - name: Run the image
         run: |
-          OUTPUT=$(docker run --rm "$IMAGE:$VERSION")
+          OUTPUT=$(docker run --rm --platform "$PLATFORM" "$IMAGE:$VERSION")
           echo "$OUTPUT"
           [ "$OUTPUT" = "$EXPECTED_OUTPUT" ]
 
       - name: Check it does not run as root
         run: |
-          USER_ID=$(docker run --rm --entrypoint id "$IMAGE:$VERSION" -u)
+          USER_ID=$(docker run --rm --platform "$PLATFORM" --entrypoint id "$IMAGE:$VERSION" -u)
           echo "uid=${USER_ID}"
           [ "$USER_ID" != "0" ]
 
