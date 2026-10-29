@@ -19,3 +19,29 @@ gradle-app.setting
 .project
 # JDT-specific (Eclipse Java Development Tools)
 .classpath
+
+# IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+.vscode/
+.settings/
+bin/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Secrets and local environment: never commit credentials
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*token*.txt
+*secret*
