@@ -42,4 +42,9 @@ WORKDIR /app
 COPY --from=build /app.jar /app/app.jar
 
 USER 10001:10001
+
+# The container prints one line and exits: there is no long-running process
+# to health-check. Declared explicitly rather than left out by accident.
+HEALTHCHECK NONE
+
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
