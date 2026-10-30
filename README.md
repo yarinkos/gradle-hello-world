@@ -39,57 +39,10 @@ patch version (`1.0.3` → `1.0.4`), builds, tests, pushes the image to Docker H
 pulls and runs it, then tags `v1.0.4` and publishes a GitHub Release with the jar.
 Nothing is versioned by hand.
 
-Everything below is detail.
+Everything below is detail. Answers to the exercise's "understand this repository"
+questions (language, Gradle, the wrapper) are in [docs/questions.md](docs/questions.md).
 
 ---
-
-## Exercise tasks
-
-| Task | Where |
-|---|---|
-| 1. Fork | this repository, forked from `ido83/gradle-hello-world` |
-| 2. Understand the repository | [Questions](#questions-task-2) |
-| 3. Build with GitHub Actions | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) |
-| 4a. Name in the message | [`HelloWorld.java`](src/main/java/com/ido/HelloWorld.java) |
-| 4b. Jar version 1.0.0 | tag `v1.0.0`; initial version in [`build.gradle.kts`](build.gradle.kts) |
-| 5a. Auto-increment the patch | `version` job (axion-release) |
-| 5b, 5c. Compile and package | `build` job |
-| 5d. Build artifact | `build` job, `actions/upload-artifact` |
-| 5e. Dockerfile, tagged with the jar version, non-root | [`Dockerfile`](Dockerfile), `docker` job |
-| 5f. Push to Docker Hub | `docker` job |
-| 5g. Download and run | `run` job |
-| Bonus: multi-stage | [`Dockerfile`](Dockerfile): tests and packaging run inside the build stage |
-
-## Questions (task 2)
-
-**Which programming language is this?**
-Java. The build script, `build.gradle.kts`, is written in Kotlin, but there is no
-Kotlin application code.
-
-**What is Gradle?**
-A build automation tool for the JVM. It compiles code, resolves dependencies from
-repositories such as Maven Central, runs tests and packages artifacts. Builds are
-described in code (Kotlin or Groovy DSL) rather than XML, and plugins add
-capabilities (here: `application`, `shadow` for the fat jar, `axion-release` for
-versioning, `spotless` for formatting).
-
-**How does Gradle work?**
-A build runs in three phases:
-1. **Initialization**: reads `settings.gradle.kts` to find the projects in the build.
-2. **Configuration**: runs the build scripts and builds a graph of tasks and their
-   dependencies (for example `build` → `check` → `test` → `compileJava`).
-3. **Execution**: runs only the tasks the requested task needs, in dependency order.
-
-Each task declares its inputs and outputs, so an unchanged task is skipped
-(`UP-TO-DATE`) or restored from the build cache. That is why a second build is
-much faster. A background daemon keeps a warm JVM between builds.
-
-**What is the Gradle wrapper?**
-`gradlew` / `gradlew.bat` plus `gradle/wrapper/`. It is a small launcher committed
-to the repository that downloads the exact Gradle version named in
-`gradle-wrapper.properties` and runs it. Nobody has to install Gradle, and every
-developer and CI machine builds with the same version. Here it is also pinned with
-a SHA-256 of the distribution, so a tampered download is rejected.
 
 ## Pipeline
 
@@ -184,6 +137,7 @@ make version        Print the version axion derives from git
 ├── gradle/wrapper/                Gradle wrapper (pinned version + checksum)
 ├── Dockerfile                     multi-stage, non-root, multi-arch
 ├── Makefile                       local shortcuts
+├── docs/questions.md              answers to the exercise's task 2 questions
 └── .dockerignore / .gitignore
 ```
 
