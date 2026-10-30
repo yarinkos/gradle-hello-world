@@ -5,6 +5,11 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      verify-arm64:
+        description: Also pull and run the arm64 image on an ARM runner (master only)
+        type: boolean
+        default: false
 
 # PRs: a newer push cancels the older run.
 # master: runs queue instead. Two overlapping runs would both read the same last
@@ -107,6 +112,8 @@ jobs:
 
       # Emulates arm64 for the runtime stage; the jar itself is built natively.
       - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
 
       - uses: docker/setup-buildx-action@v4
 
@@ -131,21 +138,23 @@ jobs:
   # ─── run ───────────────────────────────────────────────────────────────────
   # Task 5g: download the image that was just pushed and run it. A fresh pull
   # from Docker Hub, so this checks what was published, not a local build.
-  # Runs once per platform, so the arm64 image is checked as well, not just built.
+  # Always checks amd64. The arm64 image is always built and pushed, but running
+  # it is optional: start the workflow manually with verify-arm64 = true.
+  # It then runs on a native ARM runner, so no emulation is needed here.
+  # (On push, `inputs` is empty, so verify-arm64 is false.)
   run:
     needs: [version, docker]
     if: github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
     strategy:
       matrix:
-        platform: [linux/amd64, linux/arm64]
+        include: ${{ fromJSON(inputs.verify-arm64
+          && '[{"platform":"linux/amd64","runner":"ubuntu-latest"},{"platform":"linux/arm64","runner":"ubuntu-24.04-arm"}]'
+          || '[{"platform":"linux/amd64","runner":"ubuntu-latest"}]') }}
+    runs-on: ${{ matrix.runner }}
     env:
       VERSION: ${{ needs.version.outputs.version }}
       PLATFORM: ${{ matrix.platform }}
     steps:
-      - uses: docker/setup-qemu-action@v4
-        if: matrix.platform != 'linux/amd64'
-
       - name: Pull from Docker Hub
         run: docker pull --platform "$PLATFORM" "$IMAGE:$VERSION"
 
@@ -187,9 +196,17 @@ jobs:
       # Same commit as the `version` job, so axion releases the same version.
       # Guarded anyway: a mismatch fails before anything is pushed.
       # A tag pushed with GITHUB_TOKEN does not trigger another workflow run.
+      # A manual re-run (e.g. verify-arm64) on a commit that is already released
+      # rebuilds and rechecks it, but must not try to release it again.
       - name: Tag v${{ env.VERSION }}
+        id: tag
         run: |
           set -euo pipefail
+          if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+            echo "v${VERSION} already exists: nothing to release."
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           ./gradlew -q release -Prelease.disableChecks -Prelease.localOnly
@@ -199,12 +216,15 @@ jobs:
             exit 1
           fi
           git push origin "v${VERSION}"
+          echo "released=true" >> "$GITHUB_OUTPUT"
 
       - uses: actions/download-artifact@v8
+        if: steps.tag.outputs.released == 'true'
         with:
           name: gradle-hello-world-${{ env.VERSION }}
 
       - name: Create GitHub Release
+        if: steps.tag.outputs.released == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
