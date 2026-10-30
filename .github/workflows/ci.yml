@@ -102,13 +102,29 @@ jobs:
   # Task 5e-5f: build the multi-stage image tagged with the jar version.
   # PRs only build it (proves the Dockerfile works); master also pushes.
   # Multi-arch: amd64 for most servers and CI, arm64 for Apple Silicon Macs.
+  #
+  # Security gate (Trivy): the image is scanned BEFORE it is pushed. A CRITICAL
+  # vulnerability that has a fix fails the job, so it never reaches Docker Hub.
+  # Every finding, at any severity, is also uploaded to the repo's Security tab.
   docker:
     needs: [version, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload the SARIF report to the Security tab
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
+
+      # Dockerfile misconfigurations (root user, secrets in ENV, ...).
+      - name: Scan the Dockerfile
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
 
       # Emulates arm64 for the runtime stage; the jar itself is built natively.
       - uses: docker/setup-qemu-action@v4
@@ -123,7 +139,48 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v7
+      # Build amd64 into the local Docker daemon so Trivy can scan it before
+      # anything is pushed. Both platforms share the same Alpine/JRE packages,
+      # so scanning one covers the other. The push below reuses these layers
+      # from the cache.
+      - name: Build image for scanning
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          build-args: VERSION=${{ env.VERSION }}
+          platforms: linux/amd64
+          load: true
+          tags: ${{ env.IMAGE }}:${{ env.VERSION }}
+          cache-from: type=gha
+
+      # Full report, every severity, to the Security tab. Never fails the job
+      # by itself; uploaded even if the gate below fails, to show why.
+      - name: Scan the image (report)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ env.VERSION }}
+          format: sarif
+          output: trivy-image.sarif
+
+      - name: Upload the report to the Security tab
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+      # The gate: CRITICAL with a fix available. Unfixed CVEs can't be acted on
+      # by rebuilding, so they are reported above but don't block the release.
+      - name: Scan the image (gate)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ env.VERSION }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          skip-setup-trivy: true
+
+      - name: Build and push (amd64 + arm64)
+        uses: docker/build-push-action@v7
         with:
           context: .
           build-args: VERSION=${{ env.VERSION }}
